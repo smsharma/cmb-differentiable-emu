@@ -27,7 +27,7 @@ import scipy.linalg
 from functools import partial
 
 
-class PlanckLitePy:
+class PlanckLiteJax:
     def __init__(
         self,
         data_directory="data",
@@ -37,14 +37,14 @@ class PlanckLitePy:
         ellmin=2,  # Minimum ell of input arrays
     ):
         """
-        data_directory = path from where you are running this to the folder
-          containing the planck2015/8_low_ell and planck2015/8_plik_lite data
-        year = 2015 or 2018
-        spectra = TT for just temperature or TTTEEE for temperature (TT),
-          E mode (EE) and cross (TE) spectra
-        use_low_ell_bins = True to use 2 low ell bins for the TT 2<=ell<30 data
-          or False to only use ell>=30
-        ellmin = minimum ell of input arrays
+        :param data_directory: path from where you are running this to the folder
+            containing the planck2015/8_low_ell and planck2015/8_plik_lite data
+        :param year: 2015 or 2018
+        :param spectra: TT for just temperature or TTTEEE for temperature (TT),
+            E mode (EE) and cross (TE) spectra
+        :param use_low_ell_bins: True to use 2 low ell bins for the TT 2<=ell<30 data
+            or False to only use ell>=30
+        :param ellmin: minimum ell of input arrays
         """
         self.year = year
         self.spectra = spectra
@@ -82,14 +82,14 @@ class PlanckLitePy:
             print("Spectra must be TT or TTTEEE")
             return 1
 
-        self.nbintt_hi = 215  # 30-2508   #used when getting covariance matrix
+        self.nbintt_hi = 215  # 30-2508   # Used when getting covariance matrix
         self.nbinte = 199  # 30-1996
         self.nbinee = 199  # 30-1996
         self.nbin_hi = self.nbintt_hi + self.nbinte + self.nbinee
 
         self.nbintt = (
             self.nbintt_hi + self.nbintt_low_ell
-        )  # mostly want this if using low ell
+        )  # Mostly want this if using low ell
         self.nbin_tot = self.nbintt + self.nbinte + self.nbinee
 
         self.like_file = self.data_dir + "cl_cmb_plik_v" + str(version) + ".dat"
@@ -98,7 +98,7 @@ class PlanckLitePy:
         self.blmax_file = self.data_dir + "blmax.dat"
         self.binw_file = self.data_dir + "bweight.dat"
 
-        # read in binned ell value, C(l) TT, TE and EE and errors
+        # Read in binned ell value, C(l) TT, TE and EE and errors
         # use_tt etc to select relevant parts
         self.bval, self.X_data, self.X_sig = onp.genfromtxt(self.like_file, unpack=True)
         self.blmin = onp.loadtxt(self.blmin_file).astype(int)
@@ -237,6 +237,7 @@ class PlanckLitePy:
 
     @partial(jax.jit, static_argnums=(0, 2, 4, 5))
     def bin_Cl(self, Cl, ellmin, bin_indices, delta, nbin, blmin, plmin, bin_w):
+        """Helper function to bin Cls."""
 
         Cl_bin = np.zeros(nbin)
 
@@ -254,6 +255,7 @@ class PlanckLitePy:
 
     @partial(jax.jit, static_argnums=(0,))
     def loglike(self, Dltt, Dlte, Dlee):
+        """Log likelihood function."""
 
         # Convert model Dl's to Cls then bin them
         ell = np.arange(len(Dltt)) + self.ellmin

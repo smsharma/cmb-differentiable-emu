@@ -1,0 +1,3 @@
+# CMB parameter (variational) inference with a differentiable emulator
+
+A quick example of using a differentiable emulator for cosmological parameter inference using CMB power spectra. Uses a Jax version of the `plik-lite` Planck 2018 likelihood and `CosmoPower-JAX` for power spectra emulation.
