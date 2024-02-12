@@ -232,20 +232,6 @@ class PlanckLitePy:
 
         Cl_bin = np.zeros(nbin)
 
-        # for i in bin_indices:
-
-        #     sum_index_start = blmin[i] + plmin - ellmin
-
-        #     weighted_sum = np.sum(
-        #         jax.lax.dynamic_slice(Cl, [sum_index_start], [delta])
-        #         * jax.lax.dynamic_slice(bin_w, [blmin[i]], [delta])
-        #     )
-
-        #     # Update Cltt_bin accumulator.
-        #     Cl_bin = Cl_bin.at[i].set(weighted_sum)
-
-        # Rewrite using jax.lax.fori_loop
-
         def body(i, Cl_bin):
             sum_index_start = blmin[bin_indices[i]] + plmin - ellmin
             weighted_sum = np.sum(
