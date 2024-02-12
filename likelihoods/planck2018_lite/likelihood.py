@@ -1,4 +1,10 @@
 """
+Differentiable version of Planck's plik-lite likelihood in Jax, adapted 
+from https://github.com/heatherprince/planck-lite-py. Original docstring
+below:
+
+---
+
 Python version of Planck's plik-lite likelihood with the option to include
 the low-ell temperature as two Gaussian bins
 
@@ -15,7 +21,6 @@ planck calibration is set to 1 by default but this can easily be modified
 
 import jax
 import jax.numpy as np
-from jax import lax
 import numpy as onp
 from scipy.io import FortranFile
 import scipy.linalg
@@ -39,6 +44,7 @@ class PlanckLitePy:
           E mode (EE) and cross (TE) spectra
         use_low_ell_bins = True to use 2 low ell bins for the TT 2<=ell<30 data
           or False to only use ell>=30
+        ellmin = minimum ell of input arrays
         """
         self.year = year
         self.spectra = spectra
@@ -147,6 +153,8 @@ class PlanckLitePy:
 
         self.ellmin = ellmin
 
+        # Get unique bins and indices for TT, so Jax can handle the operations
+
         sum_index_start = self.blmin_TT + self.plmin_TT - self.ellmin
         sum_index_end = self.blmax_TT + self.plmin_TT + 1 - self.ellmin
 
@@ -176,40 +184,40 @@ class PlanckLitePy:
         self.bin_indices_TT = [onp.array(bi) for bi in self.bin_indices_TT]
 
     def get_inverse_covmat(self):
-        # read full covmat
+        # Read in covariance matrix
         f = FortranFile(self.cov_file, "r")
         covmat = f.read_reals(dtype=float).reshape((self.nbin_hi, self.nbin_hi))
         for i in range(self.nbin_hi):
             for j in range(i, self.nbin_hi):
                 covmat[i, j] = covmat[j, i]
 
-        # select relevant covmat
+        # Relevant part of the covariance matrix
         if self.use_tt and not (self.use_ee) and not (self.use_te):
-            # just tt
+            # Just TT
             bin_no = self.nbintt_hi
             start = 0
             end = start + bin_no
             cov = covmat[start:end, start:end]
         elif not (self.use_tt) and not (self.use_ee) and self.use_te:
-            # just te
+            # Just TE
             bin_no = self.nbinte
             start = self.nbintt_hi
             end = start + bin_no
             cov = covmat[start:end, start:end]
         elif not (self.use_tt) and self.use_ee and not (self.use_te):
-            # just ee
+            # Just EE
             bin_no = self.nbinee
             start = self.nbintt_hi + self.nbinte
             end = start + bin_no
             cov = covmat[start:end, start:end]
         elif self.use_tt and self.use_ee and self.use_te:
-            # use all
+            # Use all
             bin_no = self.nbin_hi
             cov = covmat
         else:
             print("not implemented")
 
-        # invert high ell covariance matrix (cholesky decomposition should be faster)
+        # Invert high \ell covariance matrix (cholesky decomposition should be faster)
         fisher = scipy.linalg.cho_solve(
             scipy.linalg.cho_factor(cov), np.identity(bin_no)
         )
@@ -247,9 +255,9 @@ class PlanckLitePy:
     @partial(jax.jit, static_argnums=(0,))
     def loglike(self, Dltt, Dlte, Dlee):
 
-        # convert model Dl's to Cls then bin them
-        ls = np.arange(len(Dltt)) + self.ellmin
-        fac = ls * (ls + 1) / (2 * np.pi)
+        # Convert model Dl's to Cls then bin them
+        ell = np.arange(len(Dltt)) + self.ellmin
+        fac = ell * (ell + 1) / (2 * np.pi)
         Cltt = Dltt / fac
         Clte = Dlte / fac
         Clee = Dlee / fac
@@ -257,6 +265,9 @@ class PlanckLitePy:
         # Fortran to python slicing: a:b becomes a-1:b
         # need to subtract 1 to use 0 indexing for cl,
         # then add one for weights because fortran includes top value
+
+        # Loop over \ell ranges with the same binning, so Jax can
+        # handle the operations
 
         Cltt_bin = np.zeros(self.nbintt)
         for i in range(len(self.bin_indices_TT)):
@@ -302,7 +313,6 @@ class PlanckLitePy:
 
         X_model = np.zeros(self.nbin_tot)
 
-        # Rewrite using at[idx].set() to avoid in-place operations
         X_model = X_model.at[: self.nbintt].set(Cltt_bin / self.calPlanck**2)
         X_model = X_model.at[self.nbintt : self.nbintt + self.nbinte].set(
             Clte_bin / self.calPlanck**2
@@ -313,30 +323,29 @@ class PlanckLitePy:
 
         Y = self.X_data - X_model
 
-        # choose relevant bits based on whether using TT, TE, EE
         if self.use_tt and not (self.use_ee) and not (self.use_te):
-            # just tt
+            # Just TT
             bin_no = self.nbintt
             start = 0
             end = start + bin_no
             diff_vec = Y[start:end]
         elif not (self.use_tt) and not (self.use_ee) and self.use_te:
-            # just te
+            # Just TE
             bin_no = self.nbinte
             start = self.nbintt
             end = start + bin_no
             diff_vec = Y[start:end]
         elif not (self.use_tt) and self.use_ee and not (self.use_te):
-            # just ee
+            # Just EE
             bin_no = self.nbinee
             start = self.nbintt + self.nbinte
             end = start + bin_no
             diff_vec = Y[start:end]
         elif self.use_tt and self.use_ee and self.use_te:
-            # use all
+            # Use all
             bin_no = self.nbin_tot
             diff_vec = Y
         else:
-            print("not implemented")
+            raise NotImplementedError
 
         return -0.5 * diff_vec.dot(self.fisher.dot(diff_vec))
